@@ -14,7 +14,7 @@ public class EchoServer extends Server {
     try {
       String line;
       while ((line = in.readLine()) != null) {
-        Message request = mapper.readValue(line, Message.class);
+        Message request = JsonUtil.readValue(line, Message.class);
         ObjectNode body = (ObjectNode) request.getBody();
         String type = body.get("type").asText();
         log("Handling " + request);
@@ -30,7 +30,7 @@ public class EchoServer extends Server {
     }
   }
 
-  private void handleEcho(Message request) throws IOException {
+  private void handleEcho(Message request) {
     ObjectNode body = request.getBody().deepCopy();
     body.put("type", "echo_ok");
     body.put("in_reply_to", body.get("msg_id").asLong());

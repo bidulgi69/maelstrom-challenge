@@ -1,7 +1,6 @@
 package bidulgi69.maelstrom;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.BufferedReader;
@@ -12,21 +11,19 @@ import java.util.List;
 
 public abstract class Server {
     final BufferedReader in;
-    final ObjectMapper mapper;
 
     String nodeId;
     List<String> nodeIds;
 
     Server() {
         this.in = new BufferedReader(new InputStreamReader(System.in));
-        this.mapper = new ObjectMapper();
 
         this.nodeIds = new ArrayList<>();
     }
 
     abstract void run();
 
-    void handleInit(Message request) throws IOException {
+    void handleInit(Message request) {
         ObjectNode body = (ObjectNode) request.getBody();
         this.nodeId = body.get("node_id").asText();
         JsonNode topology = body.get("node_ids");
@@ -36,24 +33,23 @@ public abstract class Server {
             }
         }
 
-        ObjectNode responseBody = mapper.createObjectNode();
+        ObjectNode responseBody = JsonUtil.createObjectNode();
         responseBody.put("in_reply_to", body.get("msg_id").asLong());
         responseBody.put("type", "init_ok");
         send(request.getDest(), request.getSrc(), responseBody);
     }
 
-    void send(String src, String dest, ObjectNode body) throws IOException {
+    void send(String src, String dest, ObjectNode body) {
         Message message = new Message(src, dest, body);
         log("Sending " + message);
 
         ObjectNode envelope = toJson(message);
-        System.out.println(mapper.writeValueAsString(envelope));
+        System.out.println(JsonUtil.writeValueAsString(envelope));
         System.out.flush();
     }
 
     void cleanup() {
         try {
-            mapper.clearCaches();
             in.close();
         } catch (IOException ignored) {}
     }
@@ -64,7 +60,7 @@ public abstract class Server {
     }
 
     ObjectNode toJson(Message message) {
-        ObjectNode json = mapper.createObjectNode();
+        ObjectNode json = JsonUtil.createObjectNode();
         json.put("src", message.getSrc());
         json.put("dest", message.getDest());
         json.set("body", message.getBody());

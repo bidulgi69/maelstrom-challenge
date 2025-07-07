@@ -18,7 +18,7 @@ public class UniqueIdGenerationServer extends Server {
         try {
             String line;
             while ((line = in.readLine()) != null) {
-                Message request = mapper.readValue(line, Message.class);
+                Message request = JsonUtil.readValue(line, Message.class);
                 ObjectNode body = (ObjectNode) request.getBody();
                 String type = body.get("type").asText();
                 log("Handling " + request);
@@ -34,7 +34,7 @@ public class UniqueIdGenerationServer extends Server {
         }
     }
 
-    private void handleGenerate(Message request) throws IOException {
+    private void handleGenerate(Message request) {
         ObjectNode body = request.getBody().deepCopy();
         body.put("type", "generate_ok");
         body.put("in_reply_to", body.get("msg_id").asLong());
