@@ -1,0 +1,29 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'bidulgi69.maelstrom'
+version = '1.0-SNAPSHOT'
+sourceCompatibility = '17'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.1'
+    // https://mvnrepository.com/artifact/com.eclipsesource.minimal-json/minimal-json
+    implementation 'com.eclipsesource.minimal-json:minimal-json:0.9.5'
+}
+
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes 'Main-Class': 'bidulgi69.maelstrom.Main'
+    }
+    // 실행 가능한 JAR 파일에 모든 의존성을 포함하려면 다음을 추가합니다.
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
