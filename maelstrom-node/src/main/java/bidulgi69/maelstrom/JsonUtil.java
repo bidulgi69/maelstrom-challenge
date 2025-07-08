@@ -2,6 +2,7 @@ package bidulgi69.maelstrom;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
@@ -11,6 +12,10 @@ public class JsonUtil {
 
     public static ObjectNode createObjectNode() {
         return mapper.createObjectNode();
+    }
+
+    public static ArrayNode createArrayNode() {
+        return mapper.createArrayNode();
     }
 
     public static <T> T readValue(String source, Class<T> clazz) throws IOException {
