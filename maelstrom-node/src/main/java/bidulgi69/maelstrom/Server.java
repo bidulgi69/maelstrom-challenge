@@ -8,16 +8,18 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 public abstract class Server {
     final BufferedReader in;
+    final AtomicLong idGenerator;
 
     String nodeId;
     List<String> nodeIds;
 
     Server() {
         this.in = new BufferedReader(new InputStreamReader(System.in));
-
+        this.idGenerator = new AtomicLong(0L);
         this.nodeIds = new ArrayList<>();
     }
 
@@ -40,6 +42,7 @@ public abstract class Server {
     }
 
     void send(String src, String dest, ObjectNode body) {
+        body.put("msg_id", createUniqueId());
         Message message = new Message(src, dest, body);
         log("Sending " + message);
 
@@ -65,5 +68,11 @@ public abstract class Server {
         json.put("dest", message.getDest());
         json.set("body", message.getBody());
         return json;
+    }
+
+    private long createUniqueId() {
+        long tag = (nodeId.hashCode() & 0xFL) << 60;
+        long sequence = idGenerator.getAndIncrement() & ((1L << 60) -1);
+        return tag | sequence;
     }
 }

@@ -7,23 +7,53 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class BroadcastServer extends Server {
 
-    private final ExecutorService executor = Executors.newFixedThreadPool(4);
+    private final ExecutorService executor;
+    private final int threshold;
+    private final long timeout;
+    private long lastFlushMs;
+    private final LinkedBlockingQueue<Long> queue;
+    private final ScheduledExecutorService scheduler;
+
     private final Set<Long> messages;
     private volatile List<String> neighbors;
-    private final AtomicLong idGenerator;
-    private final Map<Long, CompletableFuture<Void>> calls;
+    private final Map<Long, CompletableFuture<Void>> futures;
 
-    public BroadcastServer() {
+    public BroadcastServer(int threads, int threshold, long timeout) {
         super();
+        this.executor = Executors.newFixedThreadPool(threads);
+        this.threshold = threshold;
+        this.timeout = timeout;
+        this.queue = new LinkedBlockingQueue<>();
+        this.scheduler = Executors.newSingleThreadScheduledExecutor();
+        this.lastFlushMs = System.currentTimeMillis();
+        scheduler.scheduleAtFixedRate(this::schedule, 0, 100, TimeUnit.MILLISECONDS);
+
         this.messages = ConcurrentHashMap.newKeySet();
         // topology RPC를 통해 인접 노드 정보를 구할 수 있음
         this.neighbors = new ArrayList<>();
-        this.idGenerator = new AtomicLong(0L);
-        this.calls = new ConcurrentHashMap<>();
+        this.futures = new ConcurrentHashMap<>();
+    }
+
+    private void flush() {
+        List<Long> target = new ArrayList<>(threshold);
+        queue.drainTo(target, threshold);
+
+        ObjectNode gossip = JsonUtil.createObjectNode();
+        gossip.put("type", "broadcast");
+        gossip.put("batch", true);
+        gossip.set("messages", JsonUtil.longsToJson(target));
+        neighbors.forEach(adj -> broadcastGossip(adj, gossip));
+    }
+
+    private void schedule() {
+        long now = System.currentTimeMillis();
+        if (queue.size() >= threshold || now - lastFlushMs > timeout) {
+            flush();
+            this.lastFlushMs = System.currentTimeMillis();
+        }
     }
 
     public void run() {
@@ -55,31 +85,38 @@ public class BroadcastServer extends Server {
 
     private void handleBroadcast(Message request) {
         ObjectNode body = request.getBody().deepCopy();
-        long messageId = body.get("message").asLong();
-        if (!messages.contains(messageId)) {
-            messages.add(messageId);
+        long msgId = body.get("msg_id").asLong();
+        boolean batch = Optional.ofNullable(body.get("batch")).map(JsonNode::asBoolean).orElse(false);
+        List<Long> messageIds;
+        if (batch) {
+            ArrayNode an = (ArrayNode) body.get("messages");
+            messageIds = new ArrayList<>(an.size());
+            for (JsonNode message : an) {
+                messageIds.add(message.asLong());
+            }
+        } else {
+            long message = body.get("message").asLong();
+            messageIds = Collections.singletonList(message);
+        }
 
-            // 충돌을 막기 위해 gossip 전송 시점에 인접 노드를 복사한 뒤 처리
-            final List<String> snapshot = new ArrayList<>(neighbors);
-            broadcastGossip(snapshot, body);
+        for (long message : messageIds) {
+            if (!messages.contains(message)) {
+                messages.add(message);
+                queue.offer(message);
+            }
         }
 
         ObjectNode resp = JsonUtil.createObjectNode();
         resp.put("type", "broadcast_ok");
-        resp.put("in_reply_to", body.get("msg_id").asLong());
-        resp.put("msg_id", body.get("msg_id").asLong());
+        resp.put("in_reply_to", msgId);
         send(request.getDest(), request.getSrc(), resp);
     }
 
     private void handleRead(Message request) {
         ObjectNode body = request.getBody().deepCopy();
-        ArrayNode messageIds = JsonUtil.createArrayNode();
-        for (Long mId : messages) { // capture
-            messageIds.add(mId);
-        }
         body.put("type", "read_ok");
         body.put("in_reply_to", body.get("msg_id").asLong());
-        body.set("messages", messageIds);
+        body.set("messages", JsonUtil.longsToJson(messages));
         send(request.getDest(), request.getSrc(), body);
     }
 
@@ -90,7 +127,15 @@ public class BroadcastServer extends Server {
         if (adjacent.isArray()) {
             List<String> newMembership = new ArrayList<>();
             for (JsonNode adj : adjacent) {
-                newMembership.add(adj.asText());
+                String adjNode = adj.asText();
+                newMembership.add(adjNode);
+                // anti-entropy
+                for (long messageId : messages) {
+                    ObjectNode payload = JsonUtil.createObjectNode();
+                    payload.put("type", "broadcast");
+                    payload.put("message", messageId);
+                    broadcastGossip(adjNode, payload);
+                }
             }
             // swap
             this.neighbors = newMembership;
@@ -108,28 +153,37 @@ public class BroadcastServer extends Server {
             .map(JsonNode::asLong)
             .orElse(-1L);
 
-        CompletableFuture<Void> call = calls.remove(inReplyTo);
-        if (call != null) {
-            call.complete(null);
+        CompletableFuture<Void> future = futures.remove(inReplyTo);
+        if (future != null) {
+            future.complete(null);
         }
     }
 
-    private void broadcastGossip(List<String> adjacent, ObjectNode body) {
-        for (String adj : adjacent) {
-            long msgId = idGenerator.incrementAndGet();
-            body.put("msg_id", msgId);
-            CompletableFuture<Void> call = gossip(adj, body);
-            calls.putIfAbsent(msgId, call);
-        }
+    private void broadcastGossip(String adjacent, ObjectNode body) {
+        gossip(adjacent, body)
+            .orTimeout(1_000, TimeUnit.MILLISECONDS)
+            .exceptionally(e -> {
+                log("Retry gossip to " + adjacent + "msgId: " + body.get("msg_id").asLong());
+                broadcastGossip(adjacent, body);
+                return null;
+            });
     }
 
     private CompletableFuture<Void> gossip(String adj, ObjectNode body) {
-        return CompletableFuture.runAsync(() -> send(nodeId, adj, body), executor)
-            .orTimeout(1_000, TimeUnit.MILLISECONDS)
-            .exceptionally(e -> {
-                log("Gossip failed: " + e);
-                gossip(adj, body); // retry
-                return null;
-            });
+        long ttl = Optional.ofNullable(body.get("ttl")).map(JsonNode::asLong).orElse(2L);
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        body.put("ttl", ttl-1);
+        send(nodeId, adj, body); // run sync
+        futures.put(body.get("msg_id").asLong(), future);
+        return future;
+    }
+
+    @Override
+    public void cleanup() {
+        if (!queue.isEmpty()) {
+            flush();
+        }
+        this.scheduler.shutdown();
+        super.cleanup();
     }
 }

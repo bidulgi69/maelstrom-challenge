@@ -18,6 +18,14 @@ public class JsonUtil {
         return mapper.createArrayNode();
     }
 
+    public static ArrayNode longsToJson(Iterable<Long> longs) {
+        ArrayNode arrayNode = mapper.createArrayNode();
+        for (long l : longs) {
+            arrayNode.add(l);
+        }
+        return arrayNode;
+    }
+
     public static <T> T readValue(String source, Class<T> clazz) throws IOException {
         return mapper.readValue(source, clazz);
     }
