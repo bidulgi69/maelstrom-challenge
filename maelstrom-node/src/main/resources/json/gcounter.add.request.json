@@ -1,0 +1,9 @@
+{
+  "src": "c1",
+  "dest": "n1",
+  "body": {
+    "type": "add",
+    "msg_id": 1,
+    "delta": 123
+  }
+}
