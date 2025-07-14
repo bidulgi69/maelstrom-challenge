@@ -196,7 +196,7 @@ public class KafkaStyleServer extends Server {
 
             logs.forEach((k, v) -> {
                 int nextIndex = state.nextIndex
-                    .getOrDefault(node, new HashMap<>())
+                    .getOrDefault(node, new ConcurrentSkipListMap<>())
                     .getOrDefault(k, 0);
 
                 // [nextIndex, lastIndex]
@@ -289,7 +289,9 @@ public class KafkaStyleServer extends Server {
 
     @Override
     public void cleanup() {
-        scheduler.shutdown();
+        if (scheduler != null) {
+            scheduler.shutdown();
+        }
         super.cleanup();
     }
 }
