@@ -1,0 +1,10 @@
+{
+  "src": "c1",
+  "dest": "n1",
+  "body": {
+    "type": "send",
+    "msg_id": 1,
+    "key": "k1",
+    "msg": 123
+  }
+}

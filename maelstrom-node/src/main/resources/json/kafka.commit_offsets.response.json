@@ -1,0 +1,8 @@
+{
+  "src": "n1",
+  "dest": "c1",
+  "body": {
+    "type": "commit_offsets_ok",
+    "in_reply_to": 1
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "src": "c1",
+  "dest": "n1",
+  "body": {
+    "type": "commit_offsets",
+    "msg_id": 1,
+    "offsets": {
+      "k1": 1000,
+      "k2": 2000
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "src": "n1",
+  "dest": "c1",
+  "body": {
+    "type": "send_ok",
+    "in_reply_to": 1,
+    "offset": 1000
+  }
+}

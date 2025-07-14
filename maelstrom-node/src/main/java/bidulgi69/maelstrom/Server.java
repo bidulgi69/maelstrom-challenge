@@ -8,11 +8,16 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 public abstract class Server {
     final BufferedReader in;
     final AtomicLong idGenerator;
+    final Map<Long, CompletableFuture<JsonNode>> futures;
 
     String nodeId;
     List<String> nodeIds;
@@ -20,6 +25,7 @@ public abstract class Server {
     Server() {
         this.in = new BufferedReader(new InputStreamReader(System.in));
         this.idGenerator = new AtomicLong(0L);
+        this.futures = new ConcurrentHashMap<>();
         this.nodeIds = new ArrayList<>();
     }
 
@@ -74,5 +80,22 @@ public abstract class Server {
         long tag = (nodeId.hashCode() & 0xFL) << 60;
         long sequence = idGenerator.getAndIncrement() & ((1L << 60) -1);
         return tag | sequence;
+    }
+
+    CompletableFuture<JsonNode> rpc(String adj, ObjectNode body) {
+        CompletableFuture<JsonNode> future = new CompletableFuture<>();
+        send(nodeId, adj, body);
+        futures.put(body.get("msg_id").asLong(), future);
+        return future;
+    }
+
+    void broadcastGossip(String adjacent, ObjectNode body) {
+        rpc(adjacent, body)
+            .orTimeout(1_000, TimeUnit.MILLISECONDS)
+            .exceptionally(e -> {
+                log("Retry gossip to " + adjacent + ", msgId: " + body.get("msg_id").asLong());
+                broadcastGossip(adjacent, body);
+                return null;
+            });
     }
 }

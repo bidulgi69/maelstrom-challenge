@@ -1,0 +1,10 @@
+
+{
+  "src": "c1",
+  "dest": "n1",
+  "body": {
+    "msg_id": 1,
+    "type": "list_committed_offsets",
+    "keys": ["k1", "k2"]
+  }
+}

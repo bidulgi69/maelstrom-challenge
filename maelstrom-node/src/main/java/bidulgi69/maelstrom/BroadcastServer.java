@@ -159,25 +159,6 @@ public class BroadcastServer extends Server {
         }
     }
 
-    private void broadcastGossip(String adjacent, ObjectNode body) {
-        gossip(adjacent, body)
-            .orTimeout(1_000, TimeUnit.MILLISECONDS)
-            .exceptionally(e -> {
-                log("Retry gossip to " + adjacent + "msgId: " + body.get("msg_id").asLong());
-                broadcastGossip(adjacent, body);
-                return null;
-            });
-    }
-
-    private CompletableFuture<Void> gossip(String adj, ObjectNode body) {
-        long ttl = Optional.ofNullable(body.get("ttl")).map(JsonNode::asLong).orElse(2L);
-        CompletableFuture<Void> future = new CompletableFuture<>();
-        body.put("ttl", ttl-1);
-        send(nodeId, adj, body); // run sync
-        futures.put(body.get("msg_id").asLong(), future);
-        return future;
-    }
-
     @Override
     public void cleanup() {
         if (!queue.isEmpty()) {

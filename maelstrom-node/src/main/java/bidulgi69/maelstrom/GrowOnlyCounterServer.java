@@ -12,14 +12,11 @@ import java.util.concurrent.*;
 public class GrowOnlyCounterServer extends Server {
 
     private final Map<String, Long> counter;
-    private final Map<Long, CompletableFuture<Void>> futures;
     private final ScheduledExecutorService gossiper;
 
     public GrowOnlyCounterServer() {
         super();
         this.counter = new ConcurrentHashMap<>();
-        this.futures = new ConcurrentHashMap<>();
-
         this.gossiper = Executors.newSingleThreadScheduledExecutor();
     }
 
@@ -32,23 +29,6 @@ public class GrowOnlyCounterServer extends Server {
             if (node.equals(nodeId)) continue;
             broadcastGossip(node, gossip);
         }
-    }
-
-    private void broadcastGossip(String adjacent, ObjectNode body) {
-        rpc(adjacent, body)
-            .orTimeout(1_000, TimeUnit.MILLISECONDS)
-            .exceptionally(e -> {
-                log("Retry gossip to " + adjacent + "msgId: " + body.get("msg_id").asLong());
-                broadcastGossip(adjacent, body);
-                return null;
-            });
-    }
-
-    private CompletableFuture<Void> rpc(String adj, ObjectNode body) {
-        CompletableFuture<Void> future = new CompletableFuture<>();
-        send(nodeId, adj, body);
-        futures.put(body.get("msg_id").asLong(), future);
-        return future;
     }
 
     public void run() {
@@ -123,7 +103,7 @@ public class GrowOnlyCounterServer extends Server {
             .map(JsonNode::asLong)
             .orElse(-1L);
 
-        CompletableFuture<Void> future = futures.remove(inReplyTo);
+        CompletableFuture<?> future = futures.remove(inReplyTo);
         if (future != null) {
             future.complete(null);
         }

@@ -18,6 +18,10 @@ public class JsonUtil {
         return mapper.createArrayNode();
     }
 
+    public static <T> JsonNode convertValue(T value) {
+        return mapper.convertValue(value, JsonNode.class);
+    }
+
     public static ArrayNode longsToJson(Iterable<Long> longs) {
         ArrayNode arrayNode = mapper.createArrayNode();
         for (long l : longs) {
